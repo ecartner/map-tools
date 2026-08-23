@@ -4,7 +4,7 @@ from qgis.core import QgsProject, QgsVectorLayer, Qgis
 
 import config
 
-from layers import append_layer, save_layer_to_geopackage
+from layers import append_layer, inspect_road_layer, save_layer_to_geopackage
 from map_area import map_area_wgs84
 from osm import (
     build_major_roads_query,
@@ -79,6 +79,7 @@ def run():
         "major_roads",
     )
 
+    inspect_road_layer(major_roads)
+
     project.addMapLayer(major_roads)
 
-    print("features:", major_roads.featureCount())
