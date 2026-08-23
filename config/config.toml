@@ -1,0 +1,7 @@
+[osm.fields]
+highway = "highway"
+name = "name"
+ref = "ref"
+local_ref = "local_ref"
+old_ref = "old_ref"
+"destination:ref" = "destination_ref"

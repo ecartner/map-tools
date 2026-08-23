@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+
+# VS Code local settings
+.vscode/
+
+# QGIS temporary/backup files
+*.qgs~
+*.qgz~
+*.qgd
+
+# QGIS auxiliary data
+*.qgd-shm
+*.qgd-wal
+
+# Temporary files
+*.tmp
+*.bak
+*~
+
+# Generated/downloaded geospatial data
+data/
+output/
