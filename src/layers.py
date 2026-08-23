@@ -1,12 +1,24 @@
+from typing import Any
+
 from collections import Counter
+from collections.abc import Collection
+
 from pathlib import Path
 
 from qgis.core import (
     QgsCoordinateTransform,
+    QgsFeature,
+    QgsField,
+    QgsProcessing,
+    QgsProcessingContext,
+    QgsProcessingFeedback,
     QgsProject,
     QgsVectorFileWriter,
     QgsVectorLayer,
 )
+
+from qgis.PyQt.QtCore import QVariant
+from qgis import processing
 
 
 def append_layer(target_layer: QgsVectorLayer, source_layer: QgsVectorLayer):
@@ -93,6 +105,105 @@ def load_from_geopackage(gpkg_path: Path, layer_name: str) -> QgsVectorLayer:
         raise RuntimeError(f"Failed to load {layer_name} from {gpkg_path}")
 
     return layer
+
+
+def road_label(feature: QgsFeature, config: dict[str, Any]) -> str | None:
+    highway = feature["highway"]
+    name = feature["name"]
+    ref = feature["ref"]
+
+    label_config = config["major_road_labels"]
+
+    if highway in label_config["ref_first"]:
+        return ref or name
+
+    if highway in label_config["name_first"]:
+        return name or ref
+
+    return name or ref
+
+
+def create_major_road_label_layer(major_roads, config):
+    result = processing.run(
+        "native:savefeatures",
+        {
+            "INPUT": major_roads,
+            "OUTPUT": QgsProcessing.TEMPORARY_OUTPUT,
+        },
+    )
+
+    layer = QgsVectorLayer(result["OUTPUT"], "major_roads_labels_work", "ogr")
+
+    provider = layer.dataProvider()
+
+    provider.addAttributes(
+        [
+            QgsField("road_label", QVariant.String),
+        ]
+    )
+    layer.updateFields()
+
+    label_index = layer.fields().indexFromName("road_label")
+
+    changes = {}
+
+    for feature in layer.getFeatures():
+        label = road_label(feature, config)
+
+        if label is not None:
+            changes[feature.id()] = {
+                label_index: label,
+            }
+
+    provider.changeAttributeValues(changes)
+
+    return layer
+
+
+def dissolve_major_road_labels(labeled_roads: QgsVectorLayer) -> QgsVectorLayer:
+    result = processing.run(
+        "native:dissolve",
+        {
+            "INPUT": labeled_roads,
+            "FIELD": ["road_label"],
+            "SEPARATE_DISJOINT": True,
+            "OUTPUT": QgsProcessing.TEMPORARY_OUTPUT,
+        },
+    )
+
+    return result["OUTPUT"]
+
+
+def prune_fields(
+    layer: QgsVectorLayer, keep: Collection[str], name: str
+) -> QgsVectorLayer:
+    drop: list[str] = [
+        field.name() for field in layer.fields() if field.name() not in keep
+    ]
+
+    if not drop:
+        return layer
+
+    result: dict[str, object] = processing.run(
+        "native:deletecolumn",
+        {
+            "INPUT": layer,
+            "COLUMN": drop,
+            "OUTPUT": QgsProcessing.TEMPORARY_OUTPUT,
+        },
+    )
+
+    output = result["OUTPUT"]
+
+    if isinstance(output, QgsVectorLayer):
+        output.setName(name)
+        return output
+
+    return QgsVectorLayer(
+        str(output),
+        name,
+        "ogr",
+    )
 
 
 def save_to_geopackage(

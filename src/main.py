@@ -16,6 +16,8 @@ TOOL_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = TOOL_ROOT / "config" / "config.toml"
 STYLE_DIR = TOOL_ROOT / "styles"
 
+KEEP_FIELDS = ["road_label", "geometry"]
+
 def project_dir() -> Path:
     filename = QgsProject.instance().fileName()
 
@@ -137,9 +139,20 @@ def load_existing() -> None:
     """
 
     project = QgsProject.instance()
+    cfg = config.load_config()
 
     major_roads = load_major_roads()
 
     process_major_roads(major_roads)
 
     project.addMapLayer(major_roads)
+
+    major_roads_with_labels = layers.create_major_road_label_layer(major_roads, cfg)
+    temp_a_road_labels = layers.dissolve_major_road_labels(major_roads_with_labels)
+
+    temp_b_road_labels = layers.prune_fields(temp_a_road_labels, KEEP_FIELDS, "major_road_labels")
+    major_road_labels = layers.save_to_geopackage(temp_b_road_labels, gpkg_path(), "major_road_labels")
+
+    project.addMapLayer(major_road_labels)
+
+    

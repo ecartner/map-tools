@@ -5,3 +5,19 @@ ref = "ref"
 local_ref = "local_ref"
 old_ref = "old_ref"
 "destination:ref" = "destination_ref"
+
+[major_road_labels]
+ref_first = [
+    "motorway",
+    "motorway_link",
+    "trunk",
+    "trunk_link",
+]
+
+name_first = [
+    "primary",
+    "primary_link",
+    "secondary",
+    "secondary_link",
+    "tertiary",
+]
