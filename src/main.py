@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 from qgis.core import QgsProject, QgsVectorLayer, Qgis
@@ -59,8 +58,18 @@ def run():
     endpoint_ids = extract_link_endpoint_node_ids(major_roads_result)
     connector_result = query_connector_roads(endpoint_ids)
 
-    temp_major_roads = overpass_ways_to_layer(major_roads_result, "major_roads_preview", cfg["osm"]["fields"])
-    temp_connectors = overpass_ways_to_layer(connector_result, "connectors_preview", cfg["osm"]["fields"])
+    temp_major_roads = overpass_ways_to_layer(
+        major_roads_result,
+        "major_roads_preview",
+        cfg["osm"]["fields"],
+        "major",
+    )
+    temp_connectors = overpass_ways_to_layer(
+        connector_result,
+        "connectors_preview",
+        cfg["osm"]["fields"],
+        "connector"
+    )
 
     major_roads = save_layer_to_geopackage(
         temp_major_roads,
@@ -71,12 +80,5 @@ def run():
     project.addMapLayer(major_roads)
     project.addMapLayer(temp_connectors)
 
-    print("source CRS:", temp_major_roads.crs().authid())
-    print("project CRS:", QgsProject.instance().crs().authid())
-    print("saved CRS:", major_roads.crs().authid())
     print("features:", major_roads.featureCount())
-    print(f"Link endpoint nodes: {len(endpoint_ids)}")
-    print(
-        f"Connector elements: "
-        f"{len(connector_result.get('elements', []))}"
-    )
+    print(f"Connector elements: " f"{len(connector_result.get('elements', []))}")

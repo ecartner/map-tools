@@ -93,7 +93,12 @@ def run_overpass_query(query: str) -> dict:
         raise
 
 
-def overpass_ways_to_layer(result: dict, layer_name: str, osm_fields: dict) -> QgsVectorLayer:
+def overpass_ways_to_layer(
+    result: dict,
+    layer_name: str,
+    osm_fields: dict,
+    road_role: str,
+    ) -> QgsVectorLayer:
     layer = QgsVectorLayer(
         "LineString?crs=EPSG:4326",
         layer_name,
@@ -102,7 +107,8 @@ def overpass_ways_to_layer(result: dict, layer_name: str, osm_fields: dict) -> Q
 
     provider = layer.dataProvider()
     provider.addAttributes([
-        QgsField("osm_id", QVariant.LongLong)
+        QgsField("osm_id", QVariant.LongLong),
+        QgsField("road_role", QVariant.String),
     ])
 
     provider.addAttributes([
@@ -134,6 +140,7 @@ def overpass_ways_to_layer(result: dict, layer_name: str, osm_fields: dict) -> Q
         feature = QgsFeature(layer.fields())
         feature.setGeometry(QgsGeometry.fromPolylineXY(points))
         feature["osm_id"] = element["id"]
+        feature["road_role"] = road_role
 
         for tag_name, field_name in osm_fields.items():
             feature[field_name] = tags.get(tag_name)
