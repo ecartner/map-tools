@@ -57,3 +57,8 @@ def save_layer_to_geopackage(
 
     return layer
 
+def append_layer(target_layer: QgsVectorLayer, source_layer: QgsVectorLayer):
+    target_layer.dataProvider().addFeatures(
+        feature for feature in source_layer.getFeatures()
+    )
+    target_layer.updateExtents()

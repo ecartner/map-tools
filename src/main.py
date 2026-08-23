@@ -4,7 +4,7 @@ from qgis.core import QgsProject, QgsVectorLayer, Qgis
 
 import config
 
-from layers import save_layer_to_geopackage
+from layers import append_layer, save_layer_to_geopackage
 from map_area import map_area_wgs84
 from osm import (
     build_major_roads_query,
@@ -64,12 +64,14 @@ def run():
         cfg["osm"]["fields"],
         "major",
     )
-    temp_connectors = overpass_ways_to_layer(
+    connectors = overpass_ways_to_layer(
         connector_result,
         "connectors_preview",
         cfg["osm"]["fields"],
         "connector"
     )
+
+    append_layer(temp_major_roads, connectors)
 
     major_roads = save_layer_to_geopackage(
         temp_major_roads,
@@ -78,7 +80,5 @@ def run():
     )
 
     project.addMapLayer(major_roads)
-    project.addMapLayer(temp_connectors)
 
     print("features:", major_roads.featureCount())
-    print(f"Connector elements: " f"{len(connector_result.get('elements', []))}")
