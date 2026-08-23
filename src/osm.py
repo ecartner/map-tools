@@ -174,7 +174,7 @@ def extract_link_endpoint_node_ids(result: dict) -> set[int]:
 
     return node_ids
         
-def query_connector_roads(node_ids: set[int]) -> dict:
+def fetch_connector_roads(node_ids: set[int]) -> dict:
     if not node_ids:
         return {"elements": []}
 

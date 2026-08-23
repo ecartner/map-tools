@@ -3,18 +3,33 @@ from pathlib import Path
 from qgis.core import QgsProject, QgsVectorLayer, Qgis
 
 import config
-
-from layers import append_layer, inspect_road_layer, save_layer_to_geopackage
+import layers
+import osm
 from map_area import map_area_wgs84
-from osm import (
-    build_major_roads_query,
-    extract_link_endpoint_node_ids,
-    geometry_to_overpass_poly,
-    overpass_ways_to_layer,
-    query_connector_roads,
-    run_overpass_query,
-)
 
+# --------------------
+# Paths
+# --------------------
+
+TOOL_ROOT = Path(__file__).resolve().parent.parent
+
+CONFIG_PATH = TOOL_ROOT / "config" / "config.toml"
+STYLE_DIR = TOOL_ROOT / "styles"
+
+def project_dir() -> Path:
+    filename = QgsProject.instance().fileName()
+
+    if not filename:
+        raise RuntimeError("QGIS project must be saved first")
+
+    return Path(filename).resolve().parent
+
+def gpkg_path() -> Path:
+    return project_dir() / "data" / "map.gpkg"
+
+# --------------------------------------------------
+# Project Inputs
+# --------------------------------------------------
 
 def get_map_area(project: QgsProject) -> QgsVectorLayer:
     layers = project.mapLayersByName("map_area")
@@ -43,43 +58,88 @@ def get_map_area(project: QgsProject) -> QgsVectorLayer:
 
     return layer
 
+# --------------------------------------------------
+# Major roads acquisition
+# --------------------------------------------------
 
-def run():
-    project = QgsProject.instance()
+def fetch_major_roads(project: QgsProject, cfg: dict) -> QgsVectorLayer:
     map_area = get_map_area(project)
-    cfg = config.load_config()
-
-    project_dir = Path(project.absolutePath())
-    geopackage_path = project_dir / "BikeMS002.gpkg"
     geometry = map_area_wgs84(project, map_area)
-    poly = geometry_to_overpass_poly(geometry)
-    query = build_major_roads_query(poly)
-    major_roads_result = run_overpass_query(query)
-    endpoint_ids = extract_link_endpoint_node_ids(major_roads_result)
-    connector_result = query_connector_roads(endpoint_ids)
-
-    temp_major_roads = overpass_ways_to_layer(
+    poly = osm.geometry_to_overpass_poly(geometry)
+    query = osm.build_major_roads_query(poly)
+    major_roads_result = osm.run_overpass_query(query)
+    endpoint_ids = osm.extract_link_endpoint_node_ids(major_roads_result)
+    connector_result = osm.fetch_connector_roads(endpoint_ids)
+    major_roads = osm.overpass_ways_to_layer(
         major_roads_result,
         "major_roads_preview",
         cfg["osm"]["fields"],
         "major",
     )
-    connectors = overpass_ways_to_layer(
+    connectors = osm.overpass_ways_to_layer(
         connector_result,
         "connectors_preview",
         cfg["osm"]["fields"],
         "connector"
     )
+    layers.append_layer(major_roads, connectors)
 
-    append_layer(temp_major_roads, connectors)
+    return major_roads
 
-    major_roads = save_layer_to_geopackage(
-        temp_major_roads,
-        str(geopackage_path),
-        "major_roads",
-    )
 
-    inspect_road_layer(major_roads)
+def rebuild_major_roads(project: QgsProject, cfg: dict) -> QgsVectorLayer:
+    temp_major_roads = fetch_major_roads(project, cfg)
+
+    major_roads = layers.save_to_geopackage(temp_major_roads, gpkg_path(), "major_roads")
+
+    layers.inspect_road_layer(major_roads)
+
+    return major_roads
+
+# --------------------------------------------------
+# Major roads processing
+# --------------------------------------------------
+
+def process_major_roads(major_roads: QgsVectorLayer) -> None:
+    layers.apply_named_style(major_roads, STYLE_DIR / "major_roads.qml")
+
+    # Next:
+    # build_major_roads_labels(major_roads)
+
+def load_major_roads() -> QgsVectorLayer:
+    return layers.load_from_geopackage(gpkg_path(), "major_roads")
+
+# --------------------------------------------------
+# Entry points
+# --------------------------------------------------
+def run() -> None:
+    """
+    Full rebuild from OSM.
+    """
+    
+    project = QgsProject.instance()
+    cfg = config.load_config()
+
+    rebuild_major_roads(project, cfg)
+
+    major_roads = load_major_roads()
+
+    process_major_roads(major_roads)
 
     project.addMapLayer(major_roads)
 
+
+def load_existing() -> None:
+    """
+    Development entry point.
+
+    Skip Overpass and start with the existing GeoPackage.
+    """
+
+    project = QgsProject.instance()
+
+    major_roads = load_major_roads()
+
+    process_major_roads(major_roads)
+
+    project.addMapLayer(major_roads)

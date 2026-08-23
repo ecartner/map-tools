@@ -1,4 +1,5 @@
 from collections import Counter
+from pathlib import Path
 
 from qgis.core import (
     QgsCoordinateTransform,
@@ -7,63 +8,25 @@ from qgis.core import (
     QgsVectorLayer,
 )
 
-def save_layer_to_geopackage(
-    source_layer: QgsVectorLayer,
-    geopackage_path: str,
-    layer_name: str,
-) -> QgsVectorLayer:
-    project = QgsProject.instance()
-    project_crs = project.crs()
-    transform_context = project.transformContext()
-
-    options = QgsVectorFileWriter.SaveVectorOptions()
-    options.driverName = "GPKG"
-    options.layerName = layer_name
-    options.actionOnExistingFile = (
-        QgsVectorFileWriter.CreateOrOverwriteLayer
-    )
-
-    if source_layer.crs() != project_crs:
-        options.ct = QgsCoordinateTransform(
-            source_layer.crs(),
-            project_crs,
-            transform_context,
-        )
-
-    result = QgsVectorFileWriter.writeAsVectorFormatV3(
-        source_layer,
-        geopackage_path,
-        transform_context,
-        options,
-    )
-
-    error_code = result[0]
-    error_message = result[1]
-
-    if error_code != QgsVectorFileWriter.NoError:
-        raise RuntimeError(
-            f"Failed to write {layer_name!r} to GeoPackage: "
-            f"{error_message}"
-        )
-
-    layer = QgsVectorLayer(
-        f"{geopackage_path}|layername={layer_name}",
-        layer_name,
-        "ogr",
-    )
-
-    if not layer.isValid():
-        raise RuntimeError(
-            f"GeoPackage layer {layer_name!r} was written but could not be loaded"
-        )
-
-    return layer
 
 def append_layer(target_layer: QgsVectorLayer, source_layer: QgsVectorLayer):
     target_layer.dataProvider().addFeatures(
         feature for feature in source_layer.getFeatures()
     )
     target_layer.updateExtents()
+
+
+def apply_named_style(
+    layer: QgsVectorLayer,
+    style_path: Path,
+) -> None:
+    error_message, success = layer.loadNamedStyle(str(style_path))
+
+    if not success:
+        raise RuntimeError(f"Unable to load style '{style_path}': " f"{error_message}")
+
+    layer.triggerRepaint()
+
 
 def inspect_road_layer(layer: QgsVectorLayer) -> None:
     print(f"Layer: {layer.name()}")
@@ -75,7 +38,7 @@ def inspect_road_layer(layer: QgsVectorLayer) -> None:
     for name in field_names:
         print(f"   {name}")
     print()
-    
+
     highway_counts = Counter()
     role_counts = Counter()
 
@@ -100,11 +63,7 @@ def inspect_road_layer(layer: QgsVectorLayer) -> None:
             else:
                 osm_ids.append(osm_id)
 
-    duplicate_ids = [
-        osm_id
-        for osm_id, count in Counter(osm_ids).items()
-        if count > 1
-    ]
+    duplicate_ids = [osm_id for osm_id, count in Counter(osm_ids).items() if count > 1]
 
     print("Highway classes:")
     for highway, count in highway_counts.most_common():
@@ -124,4 +83,63 @@ def inspect_road_layer(layer: QgsVectorLayer) -> None:
         print("First duplicate IDs:")
         for osm_id in duplicate_ids[:20]:
             print(f"  {osm_id}")
-            
+
+
+def load_from_geopackage(gpkg_path: Path, layer_name: str) -> QgsVectorLayer:
+    uri = f"{str(gpkg_path)}|layername={layer_name}"
+    layer = QgsVectorLayer(uri, layer_name, "ogr")
+
+    if not layer.isValid():
+        raise RuntimeError(f"Failed to load {layer_name} from {gpkg_path}")
+
+    return layer
+
+
+def save_to_geopackage(
+    source_layer: QgsVectorLayer,
+    gpkg_path: Path,
+    layer_name: str,
+) -> QgsVectorLayer:
+    project = QgsProject.instance()
+    project_crs = project.crs()
+    transform_context = project.transformContext()
+
+    options = QgsVectorFileWriter.SaveVectorOptions()
+    options.driverName = "GPKG"
+    options.layerName = layer_name
+    options.actionOnExistingFile = QgsVectorFileWriter.CreateOrOverwriteLayer
+
+    if source_layer.crs() != project_crs:
+        options.ct = QgsCoordinateTransform(
+            source_layer.crs(),
+            project_crs,
+            transform_context,
+        )
+
+    result = QgsVectorFileWriter.writeAsVectorFormatV3(
+        source_layer,
+        str(gpkg_path),
+        transform_context,
+        options,
+    )
+
+    error_code = result[0]
+    error_message = result[1]
+
+    if error_code != QgsVectorFileWriter.NoError:
+        raise RuntimeError(
+            f"Failed to write {layer_name!r} to GeoPackage: " f"{error_message}"
+        )
+
+    layer = QgsVectorLayer(
+        f"{gpkg_path}|layername={layer_name}",
+        layer_name,
+        "ogr",
+    )
+
+    if not layer.isValid():
+        raise RuntimeError(
+            f"GeoPackage layer {layer_name!r} was written but could not be loaded"
+        )
+
+    return layer
