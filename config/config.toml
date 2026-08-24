@@ -21,3 +21,21 @@ name_first = [
     "secondary_link",
     "tertiary",
 ]
+
+[road_abbreviations]
+Alley = "Aly"
+Avenue = "Ave"
+Boulevard = "Blvd"
+Circle = "Cir"
+Court = "Ct"
+Drive = "Dr"
+Expressway = "Expy"
+Highway = "Hwy"
+Lane = "Ln"
+Parkway = "Pkwy"
+Place = "Pl"
+Road = "Rd"
+Street = "St"
+Terrace = "Ter"
+Trafficway = "Trfy"
+Trail = "Trl"

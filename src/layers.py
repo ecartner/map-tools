@@ -1,7 +1,7 @@
 from typing import Any
 
 from collections import Counter
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 
 from pathlib import Path
 
@@ -10,8 +10,6 @@ from qgis.core import (
     QgsFeature,
     QgsField,
     QgsProcessing,
-    QgsProcessingContext,
-    QgsProcessingFeedback,
     QgsProject,
     QgsVectorFileWriter,
     QgsVectorLayer,
@@ -19,6 +17,36 @@ from qgis.core import (
 
 from qgis.PyQt.QtCore import QVariant
 from qgis import processing
+
+from text import replace_words
+
+
+def add_road_labels(
+    layer: QgsVectorLayer,
+    abbreviations: Mapping[str, str],
+) -> None:
+    provider = layer.dataProvider()
+    provider.addAttributes([
+        QgsField("road_label", QVariant.String),
+    ])
+    layer.updateFields()
+
+    road_name_idx = layer.fields().indexOf("road_name")
+    road_label_idx = layer.fields().indexOf("road_label")
+
+    changes: dict[int, dict[int, str]] = {}
+
+    for feature in layer.getFeatures():
+        road_name = feature[road_name_idx]
+
+        if road_name is None:
+            continue
+
+        changes[feature.id()] = {
+            road_label_idx: replace_words(str(road_name), abbreviations),
+        }
+
+    provider.changeAttributeValues(changes)
 
 
 def append_layer(target_layer: QgsVectorLayer, source_layer: QgsVectorLayer):

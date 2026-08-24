@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from pathlib import Path
 import tomllib
 
@@ -8,3 +9,7 @@ CONFIG_PATH = PROJECT_ROOT / "config" / "config.toml"
 def load_config():
     with CONFIG_PATH.open("rb") as f:
         return tomllib.load(f)
+
+
+def get_road_abbreviations() -> Mapping[str, str]:
+    return load_config()["road_abbreviations"]

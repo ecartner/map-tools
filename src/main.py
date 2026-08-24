@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from qgis.core import QgsProject, QgsVectorLayer, Qgis
 
@@ -6,6 +7,7 @@ import config
 import layers
 import osm
 from map_area import map_area_wgs84
+from config import get_road_abbreviations
 
 # --------------------
 # Paths
@@ -111,7 +113,7 @@ def rebuild_major_roads(project: QgsProject, cfg: dict) -> QgsVectorLayer:
 
 def process_major_roads(
     project: QgsProject,
-    config,
+    config: dict[str, Any],
     major_roads: QgsVectorLayer,
 ) -> None:
     layers.apply_named_style(major_roads, STYLE_DIR / "major_roads.qml")
@@ -122,6 +124,10 @@ def process_major_roads(
     temp_b_road_labels = layers.prune_fields(
         temp_a_road_labels, KEEP_FIELDS, "major_road_labels"
     )
+
+    abbreviations = get_road_abbreviations()
+    layers.add_road_labels(temp_b_road_labels, abbreviations)
+
     major_road_labels = layers.save_to_geopackage(
         temp_b_road_labels, gpkg_path(), "major_road_labels"
     )
@@ -149,7 +155,7 @@ def run() -> None:
 
     major_roads = load_major_roads()
 
-    process_major_roads(major_roads)
+    process_major_roads(major_roads, cfg, major_roads)
 
     project.addMapLayer(major_roads)
 
