@@ -2,6 +2,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from qgis.core import (
+    NULL,
     QgsFeature,
     QgsField,
     QgsProcessing,
@@ -31,6 +32,9 @@ def add_road_labels(
 
     for feature in layer.getFeatures():
         road_name = feature[road_name_idx]
+
+        if road_name == NULL:
+            continue
 
         if road_name is None:
             continue
