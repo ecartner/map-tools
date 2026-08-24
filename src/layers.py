@@ -107,17 +107,15 @@ def load_from_geopackage(gpkg_path: Path, layer_name: str) -> QgsVectorLayer:
     return layer
 
 
-def road_label(feature: QgsFeature, config: dict[str, Any]) -> str | None:
+def pick_highway_segment_label(feature: QgsFeature, config: dict[str, Any]) -> str | None:
     highway = feature["highway"]
     name = feature["name"]
     ref = feature["ref"]
 
-    label_config = config["major_road_labels"]
-
-    if highway in label_config["ref_first"]:
+    if highway in config["ref_first"]:
         return ref or name
 
-    if highway in label_config["name_first"]:
+    if highway in config["name_first"]:
         return name or ref
 
     return name or ref
@@ -138,17 +136,17 @@ def create_major_road_label_layer(major_roads, config):
 
     provider.addAttributes(
         [
-            QgsField("road_label", QVariant.String),
+            QgsField("road_name", QVariant.String),
         ]
     )
     layer.updateFields()
 
-    label_index = layer.fields().indexFromName("road_label")
+    label_index = layer.fields().indexFromName("road_name")
 
     changes = {}
 
     for feature in layer.getFeatures():
-        label = road_label(feature, config)
+        label = pick_highway_segment_label(feature, config["major_road_labels"])
 
         if label is not None:
             changes[feature.id()] = {
@@ -160,12 +158,12 @@ def create_major_road_label_layer(major_roads, config):
     return layer
 
 
-def dissolve_major_road_labels(labeled_roads: QgsVectorLayer) -> QgsVectorLayer:
+def dissolve_major_road_label_layer(labeled_roads: QgsVectorLayer) -> QgsVectorLayer:
     result = processing.run(
         "native:dissolve",
         {
             "INPUT": labeled_roads,
-            "FIELD": ["road_label"],
+            "FIELD": ["road_name"],
             "SEPARATE_DISJOINT": True,
             "OUTPUT": QgsProcessing.TEMPORARY_OUTPUT,
         },

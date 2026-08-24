@@ -16,7 +16,8 @@ TOOL_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = TOOL_ROOT / "config" / "config.toml"
 STYLE_DIR = TOOL_ROOT / "styles"
 
-KEEP_FIELDS = ["road_label", "geometry"]
+KEEP_FIELDS = ["road_name", "geometry"]
+
 
 def project_dir() -> Path:
     filename = QgsProject.instance().fileName()
@@ -26,12 +27,15 @@ def project_dir() -> Path:
 
     return Path(filename).resolve().parent
 
+
 def gpkg_path() -> Path:
     return project_dir() / "data" / "map.gpkg"
+
 
 # --------------------------------------------------
 # Project Inputs
 # --------------------------------------------------
+
 
 def get_map_area(project: QgsProject) -> QgsVectorLayer:
     layers = project.mapLayersByName("map_area")
@@ -60,9 +64,11 @@ def get_map_area(project: QgsProject) -> QgsVectorLayer:
 
     return layer
 
+
 # --------------------------------------------------
 # Major roads acquisition
 # --------------------------------------------------
+
 
 def fetch_major_roads(project: QgsProject, cfg: dict) -> QgsVectorLayer:
     map_area = get_map_area(project)
@@ -79,10 +85,7 @@ def fetch_major_roads(project: QgsProject, cfg: dict) -> QgsVectorLayer:
         "major",
     )
     connectors = osm.overpass_ways_to_layer(
-        connector_result,
-        "connectors_preview",
-        cfg["osm"]["fields"],
-        "connector"
+        connector_result, "connectors_preview", cfg["osm"]["fields"], "connector"
     )
     layers.append_layer(major_roads, connectors)
 
@@ -92,24 +95,44 @@ def fetch_major_roads(project: QgsProject, cfg: dict) -> QgsVectorLayer:
 def rebuild_major_roads(project: QgsProject, cfg: dict) -> QgsVectorLayer:
     temp_major_roads = fetch_major_roads(project, cfg)
 
-    major_roads = layers.save_to_geopackage(temp_major_roads, gpkg_path(), "major_roads")
+    major_roads = layers.save_to_geopackage(
+        temp_major_roads, gpkg_path(), "major_roads"
+    )
 
     layers.inspect_road_layer(major_roads)
 
     return major_roads
 
+
 # --------------------------------------------------
 # Major roads processing
 # --------------------------------------------------
 
-def process_major_roads(major_roads: QgsVectorLayer) -> None:
+
+def process_major_roads(
+    project: QgsProject,
+    config,
+    major_roads: QgsVectorLayer,
+) -> None:
     layers.apply_named_style(major_roads, STYLE_DIR / "major_roads.qml")
 
-    # Next:
-    # build_major_roads_labels(major_roads)
+    major_roads_with_labels = layers.create_major_road_label_layer(major_roads, config)
+    temp_a_road_labels = layers.dissolve_major_road_label_layer(major_roads_with_labels)
+
+    temp_b_road_labels = layers.prune_fields(
+        temp_a_road_labels, KEEP_FIELDS, "major_road_labels"
+    )
+    major_road_labels = layers.save_to_geopackage(
+        temp_b_road_labels, gpkg_path(), "major_road_labels"
+    )
+    layers.apply_named_style(major_road_labels, STYLE_DIR / "major_road_labels.qml")
+
+    project.addMapLayer(major_road_labels)
+
 
 def load_major_roads() -> QgsVectorLayer:
     return layers.load_from_geopackage(gpkg_path(), "major_roads")
+
 
 # --------------------------------------------------
 # Entry points
@@ -118,7 +141,7 @@ def run() -> None:
     """
     Full rebuild from OSM.
     """
-    
+
     project = QgsProject.instance()
     cfg = config.load_config()
 
@@ -143,16 +166,7 @@ def load_existing() -> None:
 
     major_roads = load_major_roads()
 
-    process_major_roads(major_roads)
+    process_major_roads(project, cfg, major_roads)
 
     project.addMapLayer(major_roads)
 
-    major_roads_with_labels = layers.create_major_road_label_layer(major_roads, cfg)
-    temp_a_road_labels = layers.dissolve_major_road_labels(major_roads_with_labels)
-
-    temp_b_road_labels = layers.prune_fields(temp_a_road_labels, KEEP_FIELDS, "major_road_labels")
-    major_road_labels = layers.save_to_geopackage(temp_b_road_labels, gpkg_path(), "major_road_labels")
-
-    project.addMapLayer(major_road_labels)
-
-    
