@@ -1,53 +1,17 @@
-from typing import Any
-
 from collections import Counter
-from collections.abc import Collection, Mapping
+from collections.abc import Collection
 
 from pathlib import Path
 
 from qgis.core import (
     QgsCoordinateTransform,
-    QgsFeature,
-    QgsField,
     QgsProcessing,
     QgsProject,
     QgsVectorFileWriter,
     QgsVectorLayer,
 )
 
-from qgis.PyQt.QtCore import QVariant
 from qgis import processing
-
-from text import replace_words
-from configuration import SystemConfig
-
-
-def add_road_labels(
-    layer: QgsVectorLayer,
-    abbreviations: Mapping[str, str],
-) -> None:
-    provider = layer.dataProvider()
-    provider.addAttributes([
-        QgsField("road_label", QVariant.String),
-    ])
-    layer.updateFields()
-
-    road_name_idx = layer.fields().indexOf("road_name")
-    road_label_idx = layer.fields().indexOf("road_label")
-
-    changes: dict[int, dict[int, str]] = {}
-
-    for feature in layer.getFeatures():
-        road_name = feature[road_name_idx]
-
-        if road_name is None:
-            continue
-
-        changes[feature.id()] = {
-            road_label_idx: replace_words(str(road_name), abbreviations),
-        }
-
-    provider.changeAttributeValues(changes)
 
 
 def append_layer(target_layer: QgsVectorLayer, source_layer: QgsVectorLayer):
@@ -134,71 +98,6 @@ def load_from_geopackage(gpkg_path: Path, layer_name: str) -> QgsVectorLayer:
         raise RuntimeError(f"Failed to load {layer_name} from {gpkg_path}")
 
     return layer
-
-
-def pick_highway_segment_label(feature: QgsFeature, config: dict[str, Any]) -> str | None:
-    highway = feature["highway"]
-    name = feature["name"]
-    ref = feature["ref"]
-
-    if highway in config["ref_first"]:
-        return ref or name
-
-    if highway in config["name_first"]:
-        return name or ref
-
-    return name or ref
-
-
-def create_major_road_label_layer(major_roads, config: SystemConfig):
-    result = processing.run(
-        "native:savefeatures",
-        {
-            "INPUT": major_roads,
-            "OUTPUT": QgsProcessing.TEMPORARY_OUTPUT,
-        },
-    )
-
-    layer = QgsVectorLayer(result["OUTPUT"], "major_roads_labels_work", "ogr")
-
-    provider = layer.dataProvider()
-
-    provider.addAttributes(
-        [
-            QgsField("road_name", QVariant.String),
-        ]
-    )
-    layer.updateFields()
-
-    label_index = layer.fields().indexFromName("road_name")
-
-    changes = {}
-
-    for feature in layer.getFeatures():
-        label = pick_highway_segment_label(feature, config.major_road_labels)
-
-        if label is not None:
-            changes[feature.id()] = {
-                label_index: label,
-            }
-
-    provider.changeAttributeValues(changes)
-
-    return layer
-
-
-def dissolve_major_road_label_layer(labeled_roads: QgsVectorLayer) -> QgsVectorLayer:
-    result = processing.run(
-        "native:dissolve",
-        {
-            "INPUT": labeled_roads,
-            "FIELD": ["road_name"],
-            "SEPARATE_DISJOINT": True,
-            "OUTPUT": QgsProcessing.TEMPORARY_OUTPUT,
-        },
-    )
-
-    return result["OUTPUT"]
 
 
 def prune_fields(

@@ -3,7 +3,7 @@ from typing import Any
 
 from qgis.core import QgsProject, QgsVectorLayer, Qgis
 
-import configuration
+import labels
 import layers
 import osm
 from map_area import map_area_wgs84
@@ -118,15 +118,15 @@ def process_major_roads(
 ) -> None:
     layers.apply_named_style(major_roads, STYLE_DIR / "major_roads.qml")
 
-    major_roads_with_labels = layers.create_major_road_label_layer(major_roads, config)
-    temp_a_road_labels = layers.dissolve_major_road_label_layer(major_roads_with_labels)
+    major_roads_with_labels = labels.create_major_road_label_layer(major_roads, config.major_road_labels)
+    temp_a_road_labels = labels.dissolve_major_road_label_layer(major_roads_with_labels)
 
     temp_b_road_labels = layers.prune_fields(
         temp_a_road_labels, KEEP_FIELDS, "major_road_labels"
     )
 
     abbreviations = config.road_abbreviations
-    layers.add_road_labels(temp_b_road_labels, abbreviations)
+    labels.add_road_labels(temp_b_road_labels, abbreviations)
 
     major_road_labels = layers.save_to_geopackage(
         temp_b_road_labels, gpkg_path(), "major_road_labels"
