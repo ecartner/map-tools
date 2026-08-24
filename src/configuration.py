@@ -12,6 +12,10 @@ class SystemConfig:
         return self._config["major_road_labels"]
 
     @property
+    def minor_road_labels(self) -> Mapping[str, Sequence[str]]:
+        return self._config["minor_road_labels"]
+
+    @property
     def osm_fields(self) -> Mapping[str, str]:
         return self._config["osm"]["fields"]
 

@@ -22,6 +22,15 @@ name_first = [
     "tertiary",
 ]
 
+[minor_road_labels]
+ref_first = []
+name_first = [
+    "tertiary",
+    "unclassified",
+    "residential",
+    "service",
+]
+
 [road_abbreviations]
 Alley = "Aly"
 Avenue = "Ave"
