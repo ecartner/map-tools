@@ -46,7 +46,7 @@ def add_road_labels(
     provider.changeAttributeValues(changes)
 
 
-def pick_highway_segment_label(feature: QgsFeature, config: dict[str, Any]) -> str | None:
+def pick_road_name(feature: QgsFeature, config: dict[str, Any]) -> str | None:
     highway = feature["highway"]
     name = feature["name"]
     ref = feature["ref"]
@@ -59,7 +59,7 @@ def pick_highway_segment_label(feature: QgsFeature, config: dict[str, Any]) -> s
 
     return name or ref
 
-def create_major_road_label_layer(major_roads, label_config: Mapping[str, Sequence[str]]):
+def create_road_name_layer(major_roads, label_config: Mapping[str, Sequence[str]]):
     result = processing.run(
         "native:savefeatures",
         {
@@ -84,7 +84,7 @@ def create_major_road_label_layer(major_roads, label_config: Mapping[str, Sequen
     changes = {}
 
     for feature in layer.getFeatures():
-        label = pick_highway_segment_label(feature, label_config)
+        label = pick_road_name(feature, label_config)
 
         if label is not None:
             changes[feature.id()] = {
@@ -96,7 +96,7 @@ def create_major_road_label_layer(major_roads, label_config: Mapping[str, Sequen
     return layer
 
 
-def dissolve_major_road_label_layer(labeled_roads: QgsVectorLayer) -> QgsVectorLayer:
+def dissolve_road_name_layer(labeled_roads: QgsVectorLayer) -> QgsVectorLayer:
     result = processing.run(
         "native:dissolve",
         {

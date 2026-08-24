@@ -118,8 +118,8 @@ def process_major_roads(
 ) -> None:
     layers.apply_named_style(major_roads, STYLE_DIR / "major_roads.qml")
 
-    major_roads_with_labels = labels.create_major_road_label_layer(major_roads, config.major_road_labels)
-    temp_a_road_labels = labels.dissolve_major_road_label_layer(major_roads_with_labels)
+    major_roads_with_labels = labels.create_road_name_layer(major_roads, config.major_road_labels)
+    temp_a_road_labels = labels.dissolve_road_name_layer(major_roads_with_labels)
 
     temp_b_road_labels = layers.prune_fields(
         temp_a_road_labels, KEEP_FIELDS, "major_road_labels"
