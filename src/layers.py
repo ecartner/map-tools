@@ -19,6 +19,7 @@ from qgis.PyQt.QtCore import QVariant
 from qgis import processing
 
 from text import replace_words
+from configuration import SystemConfig
 
 
 def add_road_labels(
@@ -149,7 +150,7 @@ def pick_highway_segment_label(feature: QgsFeature, config: dict[str, Any]) -> s
     return name or ref
 
 
-def create_major_road_label_layer(major_roads, config):
+def create_major_road_label_layer(major_roads, config: SystemConfig):
     result = processing.run(
         "native:savefeatures",
         {
@@ -174,7 +175,7 @@ def create_major_road_label_layer(major_roads, config):
     changes = {}
 
     for feature in layer.getFeatures():
-        label = pick_highway_segment_label(feature, config["major_road_labels"])
+        label = pick_highway_segment_label(feature, config.major_road_labels)
 
         if label is not None:
             changes[feature.id()] = {

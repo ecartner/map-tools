@@ -3,11 +3,11 @@ from typing import Any
 
 from qgis.core import QgsProject, QgsVectorLayer, Qgis
 
-import config
+import configuration
 import layers
 import osm
 from map_area import map_area_wgs84
-from config import get_road_abbreviations
+from configuration import SystemConfig
 
 # --------------------
 # Paths
@@ -72,7 +72,7 @@ def get_map_area(project: QgsProject) -> QgsVectorLayer:
 # --------------------------------------------------
 
 
-def fetch_major_roads(project: QgsProject, cfg: dict) -> QgsVectorLayer:
+def fetch_major_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
     map_area = get_map_area(project)
     geometry = map_area_wgs84(project, map_area)
     poly = osm.geometry_to_overpass_poly(geometry)
@@ -83,19 +83,19 @@ def fetch_major_roads(project: QgsProject, cfg: dict) -> QgsVectorLayer:
     major_roads = osm.overpass_ways_to_layer(
         major_roads_result,
         "major_roads_preview",
-        cfg["osm"]["fields"],
+        config.osm_fields,
         "major",
     )
     connectors = osm.overpass_ways_to_layer(
-        connector_result, "connectors_preview", cfg["osm"]["fields"], "connector"
+        connector_result, "connectors_preview", config.osm_fields, "connector"
     )
     layers.append_layer(major_roads, connectors)
 
     return major_roads
 
 
-def rebuild_major_roads(project: QgsProject, cfg: dict) -> QgsVectorLayer:
-    temp_major_roads = fetch_major_roads(project, cfg)
+def rebuild_major_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
+    temp_major_roads = fetch_major_roads(project, config)
 
     major_roads = layers.save_to_geopackage(
         temp_major_roads, gpkg_path(), "major_roads"
@@ -113,7 +113,7 @@ def rebuild_major_roads(project: QgsProject, cfg: dict) -> QgsVectorLayer:
 
 def process_major_roads(
     project: QgsProject,
-    config: dict[str, Any],
+    config: SystemConfig,
     major_roads: QgsVectorLayer,
 ) -> None:
     layers.apply_named_style(major_roads, STYLE_DIR / "major_roads.qml")
@@ -125,12 +125,13 @@ def process_major_roads(
         temp_a_road_labels, KEEP_FIELDS, "major_road_labels"
     )
 
-    abbreviations = get_road_abbreviations()
+    abbreviations = config.road_abbreviations
     layers.add_road_labels(temp_b_road_labels, abbreviations)
 
     major_road_labels = layers.save_to_geopackage(
         temp_b_road_labels, gpkg_path(), "major_road_labels"
     )
+
     layers.apply_named_style(major_road_labels, STYLE_DIR / "major_road_labels.qml")
 
     project.addMapLayer(major_road_labels)
@@ -149,13 +150,14 @@ def run() -> None:
     """
 
     project = QgsProject.instance()
-    cfg = config.load_config()
+    config = SystemConfig(CONFIG_PATH)
 
-    rebuild_major_roads(project, cfg)
+
+    rebuild_major_roads(project, config)
 
     major_roads = load_major_roads()
 
-    process_major_roads(project, cfg, major_roads)
+    process_major_roads(project, config, major_roads)
 
     project.addMapLayer(major_roads)
 
@@ -168,11 +170,11 @@ def load_existing() -> None:
     """
 
     project = QgsProject.instance()
-    cfg = config.load_config()
+    config = SystemConfig(CONFIG_PATH)
 
     major_roads = load_major_roads()
 
-    process_major_roads(project, cfg, major_roads)
+    process_major_roads(project, config, major_roads)
 
     project.addMapLayer(major_roads)
 
