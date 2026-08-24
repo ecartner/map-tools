@@ -1,5 +1,5 @@
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Mapping
 import tomllib
 
 class SystemConfig:
@@ -8,7 +8,7 @@ class SystemConfig:
             self._config = tomllib.load(file)
 
     @property
-    def major_road_labels(self) -> Mapping[str, list[str]]:
+    def major_road_labels(self) -> Mapping[str, Sequence[str]]:
         return self._config["major_road_labels"]
 
     @property
