@@ -155,7 +155,7 @@ def run() -> None:
 
     major_roads = load_major_roads()
 
-    process_major_roads(major_roads, cfg, major_roads)
+    process_major_roads(project, cfg, major_roads)
 
     project.addMapLayer(major_roads)
 
