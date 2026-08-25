@@ -7,7 +7,6 @@ from qgis.core import (
     QgsField,
     QgsGeometry,
     QgsPointXY,
-    QgsProject,
     QgsVectorLayer,
 )
 
@@ -32,6 +31,13 @@ LINK_HIGHWAYS = [
 ]
 
 CONNECTOR_HIGHWAYS = [
+    "tertiary",
+    "tertiary_link",
+    "unclassified",
+    "residential",
+]
+
+MINOR_ROADS = [
     "tertiary",
     "tertiary_link",
     "unclassified",
@@ -68,6 +74,21 @@ way
 
 out body geom;
 """.strip()
+
+
+def build_minor_roads_query(poly: str) -> str:
+    highway_regex = "|".join(MINOR_ROADS)
+
+    return f"""
+[out:json][timeout:120];
+
+way
+  ["highway"~"^({highway_regex})$"]
+  ({poly});
+
+out body geom;
+""".strip()
+
 
 def run_overpass_query(query: str) -> dict:
     data = urllib.parse.urlencode({"data": query}).encode("utf-8")

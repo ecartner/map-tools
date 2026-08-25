@@ -68,7 +68,7 @@ def get_map_area(project: QgsProject) -> QgsVectorLayer:
 
 
 # --------------------------------------------------
-# Major roads acquisition
+# Roads acquisition
 # --------------------------------------------------
 
 
@@ -93,6 +93,20 @@ def fetch_major_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLay
 
     return major_roads
 
+def fetch_minor_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
+    map_area = get_map_area(project)
+    geometry = map_area_wgs84(project, map_area)
+    poly = osm.geometry_to_overpass_poly(geometry)
+    query = osm.build_minor_roads_query(poly)
+    result = osm.run_overpass_query(query)
+    minor_roads = osm.overpass_ways_to_layer(
+        result,
+        "minor_roads_preview",
+        config.osm_fields,
+        "minor",
+    )
+    return minor_roads
+    
 
 def rebuild_major_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
     temp_major_roads = fetch_major_roads(project, config)
@@ -105,9 +119,20 @@ def rebuild_major_roads(project: QgsProject, config: SystemConfig) -> QgsVectorL
 
     return major_roads
 
+def rebuild_minor_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
+    temp_minor_roads = fetch_minor_roads(project, config)
+
+    minor_roads = layers.save_to_geopackage(
+        temp_minor_roads, gpkg_path(), "minor_roads"
+    )
+
+    layers.inspect_road_layer(minor_roads)
+
+    return minor_roads
+
 
 # --------------------------------------------------
-# Major roads processing
+# Roads processing
 # --------------------------------------------------
 
 
@@ -136,9 +161,28 @@ def process_major_roads(
 
     project.addMapLayer(major_road_labels)
 
+def process_minor_roads(
+    project: QgsProject,
+    config: SystemConfig,
+    minor_roads: QgsVectorLayer,
+) -> None:
+    
+    named_minor_roads = labels.create_road_name_layer(minor_roads, config.minor_road_labels)
+    temp_a = labels.dissolve_road_name_layer(named_minor_roads)
+    temp_b = layers.prune_fields(temp_a, KEEP_FIELDS, "minor_road_labels")
+    abbreviations = config.road_abbreviations
+    labels.add_road_labels(temp_b, abbreviations)
+    minor_road_labels = layers.save_to_geopackage(
+        temp_b, gpkg_path(), "minor_road_labels"
+    )
+    project.addMapLayer(minor_road_labels)
+
 
 def load_major_roads() -> QgsVectorLayer:
     return layers.load_from_geopackage(gpkg_path(), "major_roads")
+
+def load_minor_roads() -> QgsVectorLayer:
+    return layers.load_from_geopackage(gpkg_path(), "minor_roads")
 
 
 # --------------------------------------------------
@@ -162,6 +206,20 @@ def run() -> None:
     project.addMapLayer(major_roads)
 
 
+def run_minor() -> None:
+    """
+    Full rebuild of minor roads from OSM
+    """
+
+    project = QgsProject.instance()
+    config = SystemConfig(CONFIG_PATH)
+    rebuild_minor_roads(project, config)
+    minor_roads = load_minor_roads()
+    process_minor_roads(project, config, minor_roads)
+    project.addMapLayer(minor_roads)
+
+
+    
 def load_existing() -> None:
     """
     Development entry point.
@@ -177,4 +235,8 @@ def load_existing() -> None:
     process_major_roads(project, config, major_roads)
 
     project.addMapLayer(major_roads)
+
+    minor_roads = load_minor_roads()
+    process_minor_roads(project, config, minor_roads)
+    project.addMapLayer(minor_roads)
 
