@@ -67,6 +67,25 @@ def get_map_area(project: QgsProject) -> QgsVectorLayer:
     return layer
 
 
+def get_detail_areas(project: QgsProject) -> QgsVectorLayer:
+    matching_layers = project.mapLayersByName("detail_areas")
+
+    if not matching_layers:
+        raise RuntimeError("Layer 'detail_areas' was not fount")
+
+    if len(matching_layers) > 1:
+        raise RuntimeError("More than one layer named 'detail_areas' exists")
+
+    layer = matching_layers[0]
+
+    if not isinstance(layer, QgsVectorLayer):
+        raise RuntimeError("'detail_areas' is not a vector layer")
+
+    if layer.geometryType() != Qgis.GeometryType.Polygon:
+        raise RuntimeError("'detail_areas' must be a polygon layer")
+    
+    return layer
+
 # --------------------------------------------------
 # Roads acquisition
 # --------------------------------------------------
@@ -93,6 +112,7 @@ def fetch_major_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLay
 
     return major_roads
 
+
 def fetch_minor_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
     map_area = get_map_area(project)
     geometry = map_area_wgs84(project, map_area)
@@ -106,7 +126,7 @@ def fetch_minor_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLay
         "minor",
     )
     return minor_roads
-    
+
 
 def rebuild_major_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
     temp_major_roads = fetch_major_roads(project, config)
@@ -118,6 +138,7 @@ def rebuild_major_roads(project: QgsProject, config: SystemConfig) -> QgsVectorL
     layers.inspect_road_layer(major_roads)
 
     return major_roads
+
 
 def rebuild_minor_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
     temp_minor_roads = fetch_minor_roads(project, config)
@@ -143,7 +164,9 @@ def process_major_roads(
 ) -> None:
     layers.apply_named_style(major_roads, STYLE_DIR / "major_roads.qml")
 
-    major_roads_with_labels = labels.create_road_name_layer(major_roads, config.major_road_labels)
+    major_roads_with_labels = labels.create_road_name_layer(
+        major_roads, config.major_road_labels
+    )
     temp_a_road_labels = labels.dissolve_road_name_layer(major_roads_with_labels)
 
     temp_b_road_labels = layers.prune_fields(
@@ -161,13 +184,16 @@ def process_major_roads(
 
     project.addMapLayer(major_road_labels)
 
+
 def process_minor_roads(
     project: QgsProject,
     config: SystemConfig,
     minor_roads: QgsVectorLayer,
 ) -> None:
-    
-    named_minor_roads = labels.create_road_name_layer(minor_roads, config.minor_road_labels)
+
+    named_minor_roads = labels.create_road_name_layer(
+        minor_roads, config.minor_road_labels
+    )
     temp_a = labels.dissolve_road_name_layer(named_minor_roads)
     temp_b = layers.prune_fields(temp_a, KEEP_FIELDS, "minor_road_labels")
     abbreviations = config.road_abbreviations
@@ -181,12 +207,29 @@ def process_minor_roads(
 def load_major_roads() -> QgsVectorLayer:
     return layers.load_from_geopackage(gpkg_path(), "major_roads")
 
+
 def load_minor_roads() -> QgsVectorLayer:
     return layers.load_from_geopackage(gpkg_path(), "minor_roads")
 
+# --------------------------------------------------
+# Details acquisition
+# --------------------------------------------------
+def fetch_green_areas(project: QgsProject) -> dict:
+    config = SystemConfig(CONFIG_PATH)
+    detail_areas = get_detail_areas(project)
+
+    return osm.fetch_detail_area_objects(
+        project,
+        detail_areas,
+        config.detail_green_areas,
+    )
 
 # --------------------------------------------------
 # Entry points
+#
+# Remember to run:
+#   import sys
+#   sys.path.insert(0, "/Users/ecartner/Code/QGIS/map-tools/src")
 # --------------------------------------------------
 def run() -> None:
     """
@@ -195,7 +238,6 @@ def run() -> None:
 
     project = QgsProject.instance()
     config = SystemConfig(CONFIG_PATH)
-
 
     rebuild_major_roads(project, config)
 
@@ -219,7 +261,6 @@ def run_minor() -> None:
     project.addMapLayer(minor_roads)
 
 
-    
 def load_existing() -> None:
     """
     Development entry point.
@@ -240,3 +281,5 @@ def load_existing() -> None:
     process_minor_roads(project, config, minor_roads)
     project.addMapLayer(minor_roads)
 
+def test_detail_areas() -> None:
+    pass

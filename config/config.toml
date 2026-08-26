@@ -48,3 +48,31 @@ Street = "St"
 Terrace = "Ter"
 Trafficway = "Trfy"
 Trail = "Trl"
+
+[detail.green_areas]
+landuse = [
+    "grass",
+    "meadow",
+    "greenery",
+    "flowerbed",
+    "recreation_ground",
+    "village_green",
+    "forest",
+]
+
+natural = [
+    "grassland",
+    "shrubbery",
+    "scrub",
+    "heath",
+    "wood",
+]
+
+leisure = [
+    "park",
+    "garden",
+]
+
+landcover = [
+    "flowerbed",
+]

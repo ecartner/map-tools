@@ -1,12 +1,18 @@
+from typing import Any
+from collections.abc import Mapping, Sequence
+
 import json
 import urllib.parse
 import urllib.request
 
 from qgis.core import (
+    QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform,
     QgsFeature,
     QgsField,
     QgsGeometry,
     QgsPointXY,
+    QgsProject,
     QgsVectorLayer,
 )
 
@@ -46,6 +52,7 @@ MINOR_ROADS = [
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
+
 def geometry_to_overpass_poly(geometry: QgsGeometry) -> str:
     polygon = geometry.asPolygon()
 
@@ -53,13 +60,39 @@ def geometry_to_overpass_poly(geometry: QgsGeometry) -> str:
         raise RuntimeError("map_area is not a simply polygon")
 
     exterior_ring = polygon[0]
-    
-    coords = " ".join(
-        f"{point.y():.7f} {point.x():.7f}"
-        for point in exterior_ring
-    )
+
+    coords = " ".join(f"{point.y():.7f} {point.x():.7f}" for point in exterior_ring)
 
     return f'poly:"{coords}"'
+
+
+def build_area_query(
+    poly: str,
+    tags: Mapping[str, Sequence[str]],
+) -> str:
+    selectors: list[str] = []
+
+    for key, values in tags.items():
+        value_regex = "|".join(values)
+
+        selectors.append(
+            f'way["{key}"~"^({value_regex})$"]({poly});'
+        )
+        selectors.append(
+            f'relation["{key}"~"^({value_regex})$"]({poly});'
+        )
+
+    selector_text = "\n".join(f"  {selector}" for selector in selectors)
+
+    return f"""
+[out:json][timeout:120];
+
+(
+{selector_text}
+);
+
+out body geom;
+""".strip()
 
 
 def build_major_roads_query(poly: str) -> str:
@@ -119,7 +152,7 @@ def overpass_ways_to_layer(
     layer_name: str,
     osm_fields: dict,
     road_role: str,
-    ) -> QgsVectorLayer:
+) -> QgsVectorLayer:
     layer = QgsVectorLayer(
         "LineString?crs=EPSG:4326",
         layer_name,
@@ -127,15 +160,16 @@ def overpass_ways_to_layer(
     )
 
     provider = layer.dataProvider()
-    provider.addAttributes([
-        QgsField("osm_id", QVariant.LongLong),
-        QgsField("road_role", QVariant.String),
-    ])
+    provider.addAttributes(
+        [
+            QgsField("osm_id", QVariant.LongLong),
+            QgsField("road_role", QVariant.String),
+        ]
+    )
 
-    provider.addAttributes([
-      QgsField(field_name, QVariant.String)  
-      for field_name in osm_fields.values()
-    ])
+    provider.addAttributes(
+        [QgsField(field_name, QVariant.String) for field_name in osm_fields.values()]
+    )
 
     layer.updateFields()
 
@@ -147,11 +181,8 @@ def overpass_ways_to_layer(
         geometry = element.get("geometry")
         if not geometry:
             continue
-    
-        points = [
-            QgsPointXY(node["lon"], node["lat"])
-            for node in geometry
-        ]
+
+        points = [QgsPointXY(node["lon"], node["lat"]) for node in geometry]
 
         if len(points) < 2:
             continue
@@ -172,6 +203,54 @@ def overpass_ways_to_layer(
     layer.updateExtents()
 
     return layer
+
+def fetch_detail_area_objects(
+    project: QgsProject,
+    detail_areas: QgsVectorLayer,
+    tags: Mapping[str, Sequence[str]],
+) -> dict[str, Any]:
+    wgs84 = QgsCoordinateReferenceSystem("EPSG:4326")
+    transform = QgsCoordinateTransform(
+        detail_areas.crs(),
+        wgs84,
+        project,
+    )
+
+    elements: dict[tuple[str, int], dict[str, Any]] = {}
+
+    for feature in detail_areas.getFeatures():
+        geometry = QgsGeometry(feature.geometry())
+
+        if geometry.isEmpty():
+            continue
+
+        geometry.transform(transform)
+
+        try:
+            poly = geometry_to_overpass_poly(geometry)
+        except RuntimeError as exc:
+            raise RuntimeError(
+                f"Unable to use detail_areas feature {feature.id()}"
+            ) from exc
+
+        query = build_area_query(poly, tags)
+        result = run_overpass_query(query)
+
+        for element in result.get("elements", []):
+            element_type = element.get("type")
+            element_id = element.get("id")
+
+            if not isinstance(element_type, str):
+                continue
+
+            if not isinstance(element_id, int):
+                continue
+
+            elements[(element_type, element_id)] = element
+
+    return {
+        "elements": list(elements.values()),
+    }
 
 def extract_link_endpoint_node_ids(result: dict) -> set[int]:
     node_ids: set[int] = set()
@@ -194,7 +273,8 @@ def extract_link_endpoint_node_ids(result: dict) -> set[int]:
         node_ids.add(nodes[-1])
 
     return node_ids
-        
+
+
 def fetch_connector_roads(node_ids: set[int]) -> dict:
     if not node_ids:
         return {"elements": []}
@@ -214,5 +294,3 @@ out geom;
 """.strip()
 
     return run_overpass_query(query)
-        
-    

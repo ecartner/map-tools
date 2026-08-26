@@ -23,5 +23,9 @@ class SystemConfig:
     def road_abbreviations(self) -> Mapping[str, str]:
         return self._config["road_abbreviations"]
 
+    @property
+    def detail_green_areas(self) -> Mapping[str, Sequence[str]]:
+        return self._config["detail"]["green_areas"]
+
 
     
