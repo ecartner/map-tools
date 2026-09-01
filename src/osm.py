@@ -1,5 +1,5 @@
-from typing import Any
 from collections.abc import Mapping, Sequence
+from typing import Any, TypeAlias
 
 import json
 import urllib.parse
@@ -52,6 +52,8 @@ MINOR_ROADS = [
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
+Ring: TypeAlias = list[QgsPointXY]
+
 
 def geometry_to_overpass_poly(geometry: QgsGeometry) -> str:
     polygon = geometry.asPolygon()
@@ -75,12 +77,8 @@ def build_area_query(
     for key, values in tags.items():
         value_regex = "|".join(values)
 
-        selectors.append(
-            f'way["{key}"~"^({value_regex})$"]({poly});'
-        )
-        selectors.append(
-            f'relation["{key}"~"^({value_regex})$"]({poly});'
-        )
+        selectors.append(f'way["{key}"~"^({value_regex})$"]({poly});')
+        selectors.append(f'relation["{key}"~"^({value_regex})$"]({poly});')
 
     selector_text = "\n".join(f"  {selector}" for selector in selectors)
 
@@ -204,6 +202,60 @@ def overpass_ways_to_layer(
 
     return layer
 
+
+def overpass_areas_to_layer(
+    result: dict[str, Any],
+    layer_name: str,
+    osm_fields: Mapping[str, str],
+) -> QgsVectorLayer:
+    layer = QgsVectorLayer(
+        "MultiPolygon?crs=EPSG:4326",
+        layer_name,
+        "memory",
+    )
+
+    provider = layer.dataProvider()
+
+    provider.addAttributes(
+        [
+            QgsField("osm_id", QVariant.LongLong),
+            QgsField("osm_type", QVariant.String),
+        ]
+    )
+
+    provider.addAttributes(
+        [QgsField(field_name, QVariant.String) for field_name in osm_fields.values()]
+    )
+
+    layer.updateFields()
+
+    features: list[QgsFeature] = []
+
+    for element in result.get("elements", []):
+        geometry = _area_geometry(element)
+
+        if geometry is None:
+            continue
+
+        tags = element.get("tags", {})
+
+        feature = QgsFeature(layer.fields())
+        feature.setGeometry(geometry)
+
+        feature["osm_id"] = element["id"]
+        feature["osm_type"] = element["type"]
+
+        for tag_name, field_name in osm_fields.items():
+            feature[field_name] = tags.get(tag_name)
+
+        features.append(feature)
+
+    provider.addFeatures(features)
+    layer.updateExtents()
+
+    return layer
+
+
 def fetch_detail_area_objects(
     project: QgsProject,
     detail_areas: QgsVectorLayer,
@@ -294,3 +346,177 @@ out geom;
 """.strip()
 
     return run_overpass_query(query)
+
+
+def _overpass_points(geometry: Sequence[dict[str, Any]]) -> Ring:
+    return [QgsPointXY(float(node["lon"]), float(node["lat"])) for node in geometry]
+
+
+def _same_point(first: QgsPointXY, second: QgsPointXY) -> bool:
+    return first.x() == second.x() and first.y() == second.y()
+
+
+def _stitch_rings(segments: Sequence[Ring], relation_id: int, role: str) -> list[Ring]:
+    remaining = [list(segment) for segment in segments if len(segment) >= 2]
+
+    rings: list[Ring] = []
+
+    while remaining:
+        ring = remaining.pop()
+
+        while not _same_point(ring[0], ring[-1]):
+            for index, candidate in enumerate(remaining):
+                if _same_point(ring[-1], candidate[0]):
+                    ring.extend(candidate[1:])
+                    remaining.pop(index)
+                    break
+
+                if _same_point(ring[-1], candidate[-1]):
+                    ring.extend(reversed(candidate[:-1]))
+                    remaining.pop(index)
+                    break
+
+            else:
+                raise RuntimeError(
+                    f"Unable to close {role} ring in multipolygon relation {relation_id}"
+                )
+
+        if len(ring) < 4:
+            raise RuntimeError(
+                f"Invalid {role} ring in multipolygon relation {relation_id}"
+            )
+
+        rings.append(ring)
+
+    return rings
+
+
+def _way_area_geometry(
+    element: dict[str, Any],
+) -> QgsGeometry | None:
+    raw_geometry = element.get("geometry")
+
+    if not raw_geometry:
+        return None
+
+    ring = _overpass_points(raw_geometry)
+
+    if len(ring) < 4:
+        return None
+
+    if not _same_point(ring[0], ring[-1]):
+        return None
+
+    return QgsGeometry.fromMultiPolygonXY(
+        [
+            [ring],
+        ]
+    )
+
+
+def _relation_area_geometry(
+    element: dict[str, Any],
+) -> QgsGeometry | None:
+    relation_id = int(element["id"])
+
+    tags = element.get("tags", {})
+
+    if tags.get("type") != "multipolygon":
+        return None
+
+    outer_segments: list[Ring] = []
+    inner_segments: list[Ring] = []
+
+    for member in element.get("members", []):
+        if member.get("type") != "way":
+            continue
+
+        role = member.get("role")
+
+        if role not in ("outer", "inner"):
+            raise RuntimeError(
+                f"Multipolygon relation {relation_id} "
+                f"has way member {member.get('ref')} "
+                f"with unsupported role {role!r}"
+            )
+
+        raw_geometry = member.get("geometry")
+
+        if not raw_geometry:
+            raise RuntimeError(
+                f"Multipolygon relation {relation_id} "
+                f"member {member.get('ref')} has no geometry"
+            )
+
+        points = _overpass_points(raw_geometry)
+
+        if role == "outer":
+            outer_segments.append(points)
+        else:
+            inner_segments.append(points)
+
+    if not outer_segments:
+        raise RuntimeError(
+            f"Multipolygon relation {relation_id} " "contains no outer ways"
+        )
+
+    outer_rings = _stitch_rings(
+        outer_segments,
+        relation_id,
+        "outer",
+    )
+
+    inner_rings = _stitch_rings(
+        inner_segments,
+        relation_id,
+        "inner",
+    )
+
+    polygons: list[list[Ring]] = [[outer_ring] for outer_ring in outer_rings]
+
+    outer_geometries = [
+        QgsGeometry.fromPolygonXY([outer_ring]) for outer_ring in outer_rings
+    ]
+
+    for inner_ring in inner_rings:
+        inner_geometry = QgsGeometry.fromPolygonXY([inner_ring])
+
+        test_point = inner_geometry.pointOnSurface()
+
+        containers: list[tuple[float, int]] = []
+
+        for index, outer_geometry in enumerate(outer_geometries):
+            if outer_geometry.contains(test_point):
+                containers.append(
+                    (
+                        outer_geometry.area(),
+                        index,
+                    )
+                )
+
+        if not containers:
+            raise RuntimeError(
+                f"Inner ring in multipolygon relation "
+                f"{relation_id} is not contained by "
+                "any outer ring"
+            )
+
+        _, outer_index = min(containers)
+
+        polygons[outer_index].append(inner_ring)
+
+    return QgsGeometry.fromMultiPolygonXY(polygons)
+
+
+def _area_geometry(
+    element: dict[str, Any],
+) -> QgsGeometry | None:
+    osm_type = element.get("type")
+
+    if osm_type == "way":
+        return _way_area_geometry(element)
+
+    if osm_type == "relation":
+        return _relation_area_geometry(element)
+
+    return None
