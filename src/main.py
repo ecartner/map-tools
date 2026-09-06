@@ -155,8 +155,21 @@ def rebuild_minor_roads(project: QgsProject, config: SystemConfig) -> QgsVectorL
 # --------------------------------------------------
 # Roads processing
 # --------------------------------------------------
+def create_major_road_labels(config: SystemConfig, major_roads: QgsVectorLayer) -> QgsVectorLayer:
+    major_roads_with_labels = labels.create_road_name_layer(
+        major_roads, config.major_road_labels
+    )
+    temp_a_road_labels = labels.dissolve_road_name_layer(major_roads_with_labels)
 
+    temp_b_road_labels = layers.prune_fields(
+        temp_a_road_labels, KEEP_FIELDS, "major_road_labels"
+    )
 
+    abbreviations = config.road_abbreviations
+    labels.add_road_labels(temp_b_road_labels, abbreviations)
+
+    return temp_b_road_labels
+    
 def process_major_roads(
     project: QgsProject,
     config: SystemConfig,
@@ -281,5 +294,21 @@ def load_existing() -> None:
     process_minor_roads(project, config, minor_roads)
     project.addMapLayer(minor_roads)
 
-def test_detail_areas() -> None:
-    pass
+def test_run_001() -> None:
+    """
+    Try out major road label creation.
+    """
+
+    project = QgsProject.instance()
+    config = SystemConfig(CONFIG_PATH)
+
+    major_roads = load_major_roads()
+
+    major_road_labels_2 = create_major_road_labels(config, major_roads)
+
+    layers.apply_named_style(major_road_labels_2, config.style_dir / "major_road_labels.qml")
+    project.addMapLayer(major_road_labels_2)
+
+
+
+    
