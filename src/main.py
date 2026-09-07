@@ -18,7 +18,7 @@ TOOL_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = TOOL_ROOT / "config" / "config.toml"
 STYLE_DIR = TOOL_ROOT / "styles"
 
-KEEP_FIELDS = ["road_name", "geometry"]
+KEEP_FIELDS = ["road_name", "geometry", "highway"]
 
 
 def project_dir() -> Path:
