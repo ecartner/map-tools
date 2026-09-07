@@ -101,7 +101,7 @@ def dissolve_road_name_layer(labeled_roads: QgsVectorLayer) -> QgsVectorLayer:
         "native:dissolve",
         {
             "INPUT": labeled_roads,
-            "FIELD": ["road_name"],
+            "FIELD": ["road_name", "highway"],
             "SEPARATE_DISJOINT": True,
             "OUTPUT": QgsProcessing.TEMPORARY_OUTPUT,
         },
