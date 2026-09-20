@@ -31,7 +31,7 @@ def project_dir() -> Path:
 
 
 def gpkg_path() -> Path:
-    return project_dir() / "data" / "map.gpkg"
+    return project_dir() / "data" / "octoginta2026.gpkg"
 
 
 # --------------------------------------------------
@@ -169,6 +169,18 @@ def create_major_road_labels(config: SystemConfig, major_roads: QgsVectorLayer) 
     labels.add_road_labels(temp_b_road_labels, abbreviations)
 
     return temp_b_road_labels
+
+def create_minor_road_labels(config: SystemConfig, minor_roads: QgsVectorLayer) -> QgsVectorLayer:
+    named_minor_roads = labels.create_road_name_layer(
+        minor_roads, config.minor_road_labels
+    )
+    temp_a = labels.dissolve_road_name_layer(named_minor_roads)
+    temp_b = layers.prune_fields(temp_a, KEEP_FIELDS, "minor_road_labels")
+    abbreviations = config.road_abbreviations
+    labels.add_road_labels(temp_b, abbreviations)
+
+    return temp_b
+    
     
 def process_major_roads(
     project: QgsProject,
@@ -244,7 +256,7 @@ def fetch_green_areas(project: QgsProject) -> dict:
 #   import sys
 #   sys.path.insert(0, "/Users/ecartner/Code/QGIS/map-tools/src")
 # --------------------------------------------------
-def run() -> None:
+def build_road_layers() -> None:
     """
     Full rebuild from OSM.
     """
@@ -254,61 +266,20 @@ def run() -> None:
 
     rebuild_major_roads(project, config)
 
-    major_roads = load_major_roads()
-
-    process_major_roads(project, config, major_roads)
-
-    project.addMapLayer(major_roads)
-
-
-def run_minor() -> None:
-    """
-    Full rebuild of minor roads from OSM
-    """
-
+def label_roads() -> None:
     project = QgsProject.instance()
     config = SystemConfig(CONFIG_PATH)
+
+    major_roads = load_major_roads()
+    major_road_labels = create_major_road_labels(config, major_roads)
+    layers.apply_named_style(major_road_labels, config.style_dir / "major_road_labels.qml")
+    project.addMapLayer(major_roads)
+    project.addMapLayer(major_road_labels)
+
     rebuild_minor_roads(project, config)
     minor_roads = load_minor_roads()
-    process_minor_roads(project, config, minor_roads)
+    minor_road_labels = create_minor_road_labels(config, minor_roads)
+    layers.apply_named_style(minor_road_labels, config.style_dir / "minor_road_labels.qml")
     project.addMapLayer(minor_roads)
+    project.addMapLayer(minor_road_labels)
 
-
-def load_existing() -> None:
-    """
-    Development entry point.
-
-    Skip Overpass and start with the existing GeoPackage.
-    """
-
-    project = QgsProject.instance()
-    config = SystemConfig(CONFIG_PATH)
-
-    major_roads = load_major_roads()
-
-    process_major_roads(project, config, major_roads)
-
-    project.addMapLayer(major_roads)
-
-    minor_roads = load_minor_roads()
-    process_minor_roads(project, config, minor_roads)
-    project.addMapLayer(minor_roads)
-
-def test_run_001() -> None:
-    """
-    Try out major road label creation.
-    """
-
-    project = QgsProject.instance()
-    config = SystemConfig(CONFIG_PATH)
-
-    major_roads = load_major_roads()
-
-    major_road_labels_2 = create_major_road_labels(config, major_roads)
-
-    layers.apply_named_style(major_road_labels_2, config.style_dir / "major_road_labels.qml")
-    project.addMapLayer(major_road_labels_2)
-
-
-
-    

@@ -30,3 +30,4 @@ venv/
 # Generated/downloaded geospatial data
 data/
 output/
+aprs-current.geojson
