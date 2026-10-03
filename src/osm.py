@@ -59,7 +59,7 @@ def geometry_to_overpass_poly(geometry: QgsGeometry) -> str:
     polygon = geometry.asPolygon()
 
     if not polygon:
-        raise RuntimeError("map_area is not a simply polygon")
+        raise RuntimeError("map_area is not a simple polygon")
 
     exterior_ring = polygon[0]
 
