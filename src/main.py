@@ -128,7 +128,7 @@ def fetch_minor_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLay
     return minor_roads
 
 
-def rebuild_major_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
+def build_major_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
     temp_major_roads = fetch_major_roads(project, config)
 
     major_roads = layers.save_to_geopackage(
@@ -140,7 +140,7 @@ def rebuild_major_roads(project: QgsProject, config: SystemConfig) -> QgsVectorL
     return major_roads
 
 
-def rebuild_minor_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
+def build_minor_roads(project: QgsProject, config: SystemConfig) -> QgsVectorLayer:
     temp_minor_roads = fetch_minor_roads(project, config)
 
     minor_roads = layers.save_to_geopackage(
@@ -258,13 +258,13 @@ def fetch_green_areas(project: QgsProject) -> dict:
 # --------------------------------------------------
 def build_road_layers() -> None:
     """
-    Full rebuild from OSM.
+    Full build from OSM.
     """
 
     project = QgsProject.instance()
     config = SystemConfig(CONFIG_PATH)
 
-    rebuild_major_roads(project, config)
+    build_major_roads(project, config)
 
 def label_roads() -> None:
     project = QgsProject.instance()
@@ -276,7 +276,6 @@ def label_roads() -> None:
     project.addMapLayer(major_roads)
     project.addMapLayer(major_road_labels)
 
-    rebuild_minor_roads(project, config)
     minor_roads = load_minor_roads()
     minor_road_labels = create_minor_road_labels(config, minor_roads)
     layers.apply_named_style(minor_road_labels, config.style_dir / "minor_road_labels.qml")
